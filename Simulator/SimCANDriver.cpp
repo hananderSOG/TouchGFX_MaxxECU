@@ -36,7 +36,7 @@ float SimCANDriver::sineWave(float t_s, float min, float max) const
     return mid + amp * sinf(2.0f * M_PI * m_timeAccum_s / t_s);
 }
 
-float SimCANDriver::rampFloat(float current, float target, float rate_per_s, uint32_t delta_ms) const
+float SimCANDriver::ramp(float current, float target, float rate_per_s, uint32_t delta_ms) const
 {
     float dt = delta_ms / 1000.0f;
     float diff = target - current;
@@ -84,15 +84,15 @@ void SimCANDriver::simulateScenario(uint32_t delta_ms)
         static float phase = 0.0f;
         // ramp 2000->7800 over 6s
         float targetRpm = fmodf(m_timeAccum_s, 9.0f) < 6.0f ? (2000.0f + (7800.0f-2000.0f) * (fmodf(m_timeAccum_s,9.0f)/6.0f)) : 2500.0f;
-        m_rpm = rampFloat(m_rpm, targetRpm, 2000.0f, delta_ms);
+        m_rpm = ramp(m_rpm, targetRpm, 2000.0f, delta_ms);
         m_throttle = (targetRpm>3000.0f)? 98.0f : 20.0f;
         m_gear = 3;
         m_speed = m_rpm * 0.02f; // simple proportional
-        m_boost = rampFloat(m_boost, (m_rpm/7800.0f)*240.0f + 100.0f, 60.0f, delta_ms);
+        m_boost = ramp(m_boost, (m_rpm/7800.0f)*240.0f + 100.0f, 60.0f, delta_ms);
         m_lambda = 0.90f;
         m_oilPressure = 480.0f + 40.0f * sinf(m_timeAccum_s*5.0f);
-        for (int i=0;i<8;++i) m_egt[i] = rampFloat(m_egt[i], 400.0f + (m_rpm/7800.0f)*(950.0f-400.0f), 200.0f, delta_ms);
-        // random knock pulse
+        for (int i=0;i<8;++i) m_egt[i] = ramp(m_egt[i], 400.0f + (m_rpm/7800.0f)*(950.0f-400.0f), 200.0f, delta_ms);
+        // random knock pulse (rare)
         if ((rand()%10000) < 5) {
             g_maxxecu_data.Knock_detected = 1;
         } else {
@@ -145,12 +145,34 @@ void SimCANDriver::simulateScenario(uint32_t delta_ms)
     }
     case SimScenario::KNOCK_EVENT: {
         // mirror acceleration but generate knock every 5s
-        m_rpm = sineWave(4.0f, 2000.0f, 7800.0f);
-        m_throttle = 95.0f;
-        if (fmod(m_timeAccum_s, 5.0f) < 0.25f) {
+        // base acceleration values
+        // use a repeating ramp pattern like ACCELERATION but omit random
+        // behaviour; we'll drive knock bursts manually
+        {
+            float cycle = fmodf(m_timeAccum_s, 9.0f);
+            float targetRpm = cycle < 6.0f ? (2000.0f + (7800.0f-2000.0f) * (cycle/6.0f)) : 2500.0f;
+            m_rpm = ramp(m_rpm, targetRpm, 2000.0f, delta_ms);
+            m_throttle = (targetRpm>3000.0f)? 98.0f : 20.0f;
+            m_gear = 3;
+            m_speed = m_rpm * 0.02f;
+            m_boost = ramp(m_boost, (m_rpm/7800.0f)*240.0f + 100.0f, 60.0f, delta_ms);
+            m_lambda = 0.90f;
+            m_oilPressure = 480.0f + 40.0f * sinf(m_timeAccum_s*5.0f);
+            for (int i=0;i<8;++i) m_egt[i] = ramp(m_egt[i], 400.0f + (m_rpm/7800.0f)*(950.0f-400.0f), 200.0f, delta_ms);
+        }
+        // knock logic: every 5 seconds a 250ms pulse, also apply timing correction
+        static float last_knock_time = 0.0f;
+        if (fmodf(m_timeAccum_s, 5.0f) < 0.25f) {
             g_maxxecu_data.Knock_detected = 1;
+            if (m_timeAccum_s - last_knock_time > 5.0f) {
+                last_knock_time = m_timeAccum_s;
+            }
         } else {
             g_maxxecu_data.Knock_detected = 0;
+        }
+        // apply correction for one second after event
+        if (m_timeAccum_s - last_knock_time < 1.0f) {
+            g_maxxecu_data.Ignition_Timing = -2.5f; // retarded
         }
         break;
     }
@@ -162,10 +184,18 @@ void SimCANDriver::simulateScenario(uint32_t delta_ms)
             g_maxxecu_data.Launch_control_active = 1;
             g_maxxecu_data.Antilag_active = 1;
             m_boost = 180.0f;
+            // ensure no shiftcut until later
+            g_maxxecu_data.Shiftcut_active = 0;
         } else if (phase < 5.0f) {
-            m_rpm = rampFloat(m_rpm, 7500.0f, 1000.0f, delta_ms);
+            m_rpm = ramp(m_rpm, 7500.0f, 1000.0f, delta_ms);
             g_maxxecu_data.Launch_control_active = 0;
             g_maxxecu_data.Antilag_active = 0;
+            // apply shiftcut pulses at rpm peaks (roughly every 0.5s)
+            if (fmod(m_timeAccum_s, 0.5f) < 0.08f) {
+                g_maxxecu_data.Shiftcut_active = 1;
+            } else {
+                g_maxxecu_data.Shiftcut_active = 0;
+            }
         } else {
             m_scenario = SimScenario::ACCELERATION;
         }
@@ -174,8 +204,12 @@ void SimCANDriver::simulateScenario(uint32_t delta_ms)
     case SimScenario::ALL_WARNINGS: {
         m_coolant = 97.0f; m_oilTemp = 122.0f; m_oilPressure = 145.0f;
         m_egt[0]=960.0f; m_boost=235.0f; m_lambda=1.22f; m_speed=50.0f; m_gear=3;
+        // warnings but no critical flags
         g_maxxecu_data.Knock_detected = 0;
         g_maxxecu_data.Revlimit_active = 0;
+        g_maxxecu_data.Shiftcut_active = 0;
+        g_maxxecu_data.Launch_control_active = 0;
+        g_maxxecu_data.Antilag_active = 0;
         break;
     }
     case SimScenario::ALL_CRITICAL: {
@@ -183,6 +217,7 @@ void SimCANDriver::simulateScenario(uint32_t delta_ms)
         m_egt[0]=1080.0f; m_boost=265.0f; m_lambda=0.68f; m_speed=60.0f; m_gear=3;
         g_maxxecu_data.Knock_detected = 1;
         g_maxxecu_data.Revlimit_active = 1;
+        g_maxxecu_data.Shiftcut_active = 1;
         break;
     }
     case SimScenario::CAN_TIMEOUT: {
@@ -200,17 +235,24 @@ void SimCANDriver::simulateScenario(uint32_t delta_ms)
         break;
     }
 
-    // apply overrides
+    // apply overrides; any key not recognised is ignored
     for (auto &kv : m_overrides) {
         const string &k = kv.first;
         float v = kv.second;
         if (k == "RPM") m_rpm = v;
         else if (k == "SPEED") m_speed = v;
         else if (k == "COOLANT") m_coolant = v;
-        else if (k == "OILP") m_oilPressure = v;
+        else if (k == "OILP" || k == "OILPRESS") m_oilPressure = v;
         else if (k == "BOOST") m_boost = v;
         else if (k == "LAMBDA") m_lambda = v;
         else if (k == "THROTTLE") m_throttle = v;
+        else if (k == "KNOCK") g_maxxecu_data.Knock_detected = (v != 0.0f);
+        else if (k == "REVLIMIT") g_maxxecu_data.Revlimit_active = (v != 0.0f);
+        else if (k == "SHIFTCUT") g_maxxecu_data.Shiftcut_active = (v != 0.0f);
+        else if (k == "LAUNCH") g_maxxecu_data.Launch_control_active = (v != 0.0f);
+        else if (k == "CAN" && v == 0.0f) {
+            // special case: stop writes by disabling writeToSharedStruct
+        }
     }
 }
 

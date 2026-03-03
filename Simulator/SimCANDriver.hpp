@@ -62,8 +62,22 @@ private:
 
     void simulateScenario(uint32_t delta_ms);
     void writeToSharedStruct(bool writeEnabled);
+    /**
+     * Helper that returns a sine oscillation between \p min and \p max using
+     * the internal time accumulator.  Period is specified in seconds.
+     * The function is "pure" in the sense that it does not modify any
+     * state; it simply uses the passed time accumulator value internally.
+     */
     float sineWave(float t_s, float min, float max) const;
-    float rampFloat(float current, float target, float rate_per_s, uint32_t delta_ms) const;
+
+    /**
+     * Ramp the \p current value toward \p target at a maximum rate of
+     * \p rate_per_s units per second.  The amount of time elapsed is given
+     * by \p delta_ms.  This is used to create physically plausible smooth
+     * transitions rather than discontinuous jumps.
+     */
+    float ramp(float current, float target, float rate_per_s,
+               uint32_t delta_ms) const;
 };
 
 #endif // SIMULATOR
