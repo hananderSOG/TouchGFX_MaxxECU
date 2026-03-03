@@ -68,7 +68,8 @@ private:
      * The function is "pure" in the sense that it does not modify any
      * state; it simply uses the passed time accumulator value internally.
      */
-    float sineWave(float t_s, float min, float max) const;
+    /** Pure helper: sine oscillation between min and max using explicit time. */
+    float sineWave(float time_s, float period_s, float min, float max) const;
 
     /**
      * Ramp the \p current value toward \p target at a maximum rate of

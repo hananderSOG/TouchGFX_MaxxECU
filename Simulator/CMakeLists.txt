@@ -32,6 +32,7 @@ set(SIM_SOURCES
 set(SIM_STUBS
   Stubs/HAL_stub.cpp
   Stubs/HSEM_stub.cpp
+  Stubs/SharedMemory_stub.cpp
 )
 
 if(SIM_USE_QT)

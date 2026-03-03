@@ -29,11 +29,11 @@ void SimCANDriver::init()
     m_timeAccum_s = 0.0f;
 }
 
-float SimCANDriver::sineWave(float t_s, float min, float max) const
+float SimCANDriver::sineWave(float time_s, float t_s, float min, float max) const
 {
     float amp = (max - min) * 0.5f;
     float mid = (max + min) * 0.5f;
-    return mid + amp * sinf(2.0f * M_PI * m_timeAccum_s / t_s);
+    return mid + amp * sinf(2.0f * M_PI * time_s / t_s);
 }
 
 float SimCANDriver::ramp(float current, float target, float rate_per_s, uint32_t delta_ms) const
@@ -69,13 +69,13 @@ void SimCANDriver::simulateScenario(uint32_t delta_ms)
 
     switch (m_scenario) {
     case SimScenario::IDLE: {
-        m_rpm = sineWave(4.0f, 780.0f, 870.0f);
-        m_throttle = sineWave(4.0f, 0.0f, 3.0f);
+        m_rpm = sineWave(m_timeAccum_s, 4.0f, 780.0f, 870.0f);
+        m_throttle = sineWave(m_timeAccum_s, 4.0f, 0.0f, 3.0f);
         m_speed = 0.0f;
-        m_coolant = rampFloat(m_coolant, 88.0f, 0.5f, delta_ms);
-        m_oilPressure = sineWave(2.0f, 360.0f, 420.0f);
-        m_boost = sineWave(3.0f, 98.0f, 102.0f);
-        m_lambda = sineWave(1.5f, 0.99f, 1.02f);
+        m_coolant = ramp(m_coolant, 88.0f, 0.5f, delta_ms);
+        m_oilPressure = sineWave(m_timeAccum_s, 2.0f, 360.0f, 420.0f);
+        m_boost = sineWave(m_timeAccum_s, 3.0f, 98.0f, 102.0f);
+        m_lambda = sineWave(m_timeAccum_s, 1.5f, 0.99f, 1.02f);
         m_gear = 0;
         m_egt[0] = 250.0f; for (int i=1;i<8;++i) m_egt[i]=200.0f + i*10.0f;
         break;
@@ -101,12 +101,12 @@ void SimCANDriver::simulateScenario(uint32_t delta_ms)
         break;
     }
     case SimScenario::CRUISE: {
-        m_rpm = sineWave(8.0f, 2800.0f, 3100.0f);
-        m_speed = sineWave(10.0f, 115.0f, 125.0f);
-        m_throttle = sineWave(5.0f, 22.0f, 35.0f);
-        m_boost = sineWave(6.0f, 105.0f, 130.0f);
-        m_lambda = sineWave(2.0f, 0.98f, 1.03f);
-        m_coolant = 92.0f + sineWave(12.0f, -1.0f, 1.0f);
+        m_rpm = sineWave(m_timeAccum_s, 8.0f, 2800.0f, 3100.0f);
+        m_speed = sineWave(m_timeAccum_s, 10.0f, 115.0f, 125.0f);
+        m_throttle = sineWave(m_timeAccum_s, 5.0f, 22.0f, 35.0f);
+        m_boost = sineWave(m_timeAccum_s, 6.0f, 105.0f, 130.0f);
+        m_lambda = sineWave(m_timeAccum_s, 2.0f, 0.98f, 1.03f);
+        m_coolant = 92.0f + sineWave(m_timeAccum_s, 12.0f, -1.0f, 1.0f);
         m_gear = 5;
         for (int i=0;i<8;++i) m_egt[i] = 350.0f + i*20.0f;
         break;
@@ -130,8 +130,8 @@ void SimCANDriver::simulateScenario(uint32_t delta_ms)
     }
     case SimScenario::LOW_OIL: {
         // base cruise then oil pressure ramps down
-        m_rpm = sineWave(8.0f, 2800.0f, 3100.0f);
-        m_speed = sineWave(10.0f, 115.0f, 125.0f);
+        m_rpm = sineWave(m_timeAccum_s, 8.0f, 2800.0f, 3100.0f);
+        m_speed = sineWave(m_timeAccum_s, 10.0f, 115.0f, 125.0f);
         static uint32_t start_ms = HAL_GetTick();
         uint32_t elapsed = HAL_GetTick() - start_ms;
         if (elapsed < 10000) {
@@ -222,8 +222,8 @@ void SimCANDriver::simulateScenario(uint32_t delta_ms)
     }
     case SimScenario::CAN_TIMEOUT: {
         // handled in writeToSharedStruct by writeEnabled flag
-        m_rpm = sineWave(4.0f, 780.0f, 870.0f);
-        m_throttle = sineWave(4.0f, 0.0f, 3.0f);
+        m_rpm = sineWave(m_timeAccum_s, 4.0f, 780.0f, 870.0f);
+        m_throttle = sineWave(m_timeAccum_s, 4.0f, 0.0f, 3.0f);
         m_speed = 0.0f;
         m_coolant = 88.0f;
         m_oilPressure = 380.0f;
@@ -271,7 +271,7 @@ void SimCANDriver::writeToSharedStruct(bool writeEnabled)
 
     g_maxxecu_data.VehicleSpeed = m_speed;
     g_maxxecu_data.GearPosn = m_gear;
-    g_maxxecu_data.ECU_BatteryVoltage = sineWave(3.0f, 13.8f, 14.2f);
+    g_maxxecu_data.ECU_BatteryVoltage = sineWave(m_timeAccum_s, 3.0f, 13.8f, 14.2f);
 
     for (int i=0;i<8;++i) g_maxxecu_data.ExhaustTemp1 + i; // no-op to avoid warnings
     // fill EGTs

@@ -31,7 +31,7 @@ If Qt is enabled, a `SimControlPanel` window will appear. Use the scenario dropd
 
 Extending scenarios
 -------------------
-Edit `Simulator/SimCANDriver.cpp` to tune or add scenarios. The simulator aims to produce physically plausible, ramped and smoothed values using `sineWave()` and `rampFloat()` helpers.
+Edit `Simulator/SimCANDriver.cpp` to tune or add scenarios. The simulator aims to produce physically plausible, ramped and smoothed values using `sineWave()` and `ramp()` helpers.
 
 Limitations
 -----------

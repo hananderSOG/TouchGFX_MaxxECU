@@ -21,6 +21,10 @@ private slots:
     void onSetOverride();
     void onClearAll();
     void onInjectKnock();
+    void onInjectLaunch();
+    void onInjectRevlimit();
+    void onInjectShiftcut();
+    void onInjectCANDisconnect();
 
 private:
     QComboBox* m_scenarioBox;
@@ -28,6 +32,15 @@ private:
     QLineEdit* m_signalValue;
     QPushButton* m_setBtn;
     QPushButton* m_clearAllBtn;
+    // live data display
+    QLabel* m_rpmLabel;
+    QLabel* m_speedLabel;
+    QLabel* m_coolantLabel;
+    QLabel* m_oilLabel;
+    QLabel* m_boostLabel;
+    QLabel* m_lambdaLabel;
+    QLabel* m_gearLabel;
+    QLabel* m_alarmsLabel;
 };
 
 #else // SIM_USE_QT
