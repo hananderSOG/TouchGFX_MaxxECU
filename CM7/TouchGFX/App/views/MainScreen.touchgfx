@@ -1,0 +1,5 @@
+<!-- TouchGFX screen descriptor for MainScreen
+     (created by Copilot stub) -->
+<screen name="MainScreen" width="800" height="480">
+    <!-- layout will be defined via TouchGFX Designer -->
+</screen>

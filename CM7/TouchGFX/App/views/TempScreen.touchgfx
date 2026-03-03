@@ -1,0 +1,3 @@
+<!-- TouchGFX screen descriptor for TempScreen -->
+<screen name="TempScreen" width="800" height="480">
+</screen>
